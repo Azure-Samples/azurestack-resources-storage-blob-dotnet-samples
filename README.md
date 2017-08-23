@@ -1,57 +1,56 @@
-# Project Name
+---
+services: azure-resource-manager, azure-storeage
+platforms: dotnet
+author: guanghu
+---
 
-(short, 1-3 sentenced, description of the project)
+# Manage Azure Stack resource and storage with .Net
 
-## Features
+This sample explains how to manage your resources and storage services in Azure Stack using the Azure .NET SDK. 
 
-This project framework provides the following features:
+**On this page**
+- [Run this sample](#run)
+- [What is program.cs doing?](#example)
 
-* Feature 1
-* Feature 2
-* ...
+<a id="run"></a>
+## Run this sample
+1. If you don't have it, install the [.NET Core SDK](https://www.microsoft.com/net/core).
+1. Clone the repository.
+    ```
+    git clone https://github.com/guanghuthegreat/azurestack-storage-resources-sample-dotnet.git
+    ```
+1. Install the dependencies.
 
-## Getting Started
+    ```
+    dotnet restore
+    ```
+1. Create an Azure service principal either through
+    [Azure CLI](https://azure.microsoft.com/documentation/articles/resource-group-authenticate-service-principal-cli/),
+    [PowerShell](https://azure.microsoft.com/documentation/articles/resource-group-authenticate-service-principal/)
+    or [the portal](https://azure.microsoft.com/documentation/articles/resource-group-create-service-principal-portal/).
+   In Azure Stack give Contributor permissions to the subscription where the resources are stored. 
+1. Obtain the management endpoint URI for Azure Stack instance you are targeting from the service administrator. For example, if you are running your own ASDK deployment the URI will be in the form https://management.local.azurestack.external 
 
-### Prerequisites
+1. Find the AAD resource ID of the Azure Stack instance you are targeting. For example, if you are running your own ASDK deployment, you issue a request to https://management.local.azurestack.external/metadata/endpoints?api-version=2015-01-01. Then copy the value of the first element of the audiences property in the JSON response. 
 
-(ideally very short, if any)
+1. Export these environment variables using your subscription id and the tenant id, client id and client secret from the service principle that you created. 
 
-- OS
-- Library version
-- ...
+    ```
+    Set AZS_ACTTIVEDIRECTORY={the AAD login URI}
+    Set AZS_ACTTIVEDIRECTORYRESOURCEID={the value of audience URI retrieved in previous step}
+    Set AZS_MANAGEMENTENDPOINT={the management endpoint URI}
+    Set AZS_STORAGENDPOINT={the storage endpoint URI}
+    Set AZS_SUBID={your subscription id}
+    Set AZS_TENANTID={your tenant id}
+    Set AZS_CLIENTID={your client id}
+    Set AZS_SECURITYKEY={your client securit}
+    Set AZS_LOCATION={the location (region) of your Azure Stack deployment}
+    ```
 
-### Installation
+1. Run the sample.
 
-(ideally very short)
-
-- npm install [package name]
-- mvn install
-- ...
-
-### Quickstart
-(Add steps to get up and running quickly)
-
-1. git clone [repository clone url]
-2. cd [respository name]
-3. ...
+    ```
+    dotnet run
+    ```
 
 
-## Demo
-
-A demo app is included to show how to use the project.
-
-To run the demo, follow these steps:
-
-(Add steps to start up the demo)
-
-1.
-2.
-3.
-
-## Resources
-
-(Any additional resources or related projects)
-
-- Link to supporting information
-- Link to similar sample
-- ...
