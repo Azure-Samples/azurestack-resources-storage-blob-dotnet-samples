@@ -91,7 +91,7 @@ namespace AzureStackStorage
             }
             
         }
-
+        
         public static void PrintStorageAccountKeys(IReadOnlyList<StorageAccountKey> storageAccountKeys)
         {
             foreach (var storageAccountKey in storageAccountKeys)
@@ -103,6 +103,15 @@ namespace AzureStackStorage
         public static void PrintStorageAccount(StorageAccount sa)
         {
             Console.WriteLine($"{sa.Name} created @ {sa.CreationTime}");
+        }
+
+        public static void PrintAllStorageAccounts(IEnumerable<StorageAccount> storAccts)
+        {
+            foreach(StorageAccount sa in storAccts)
+            {
+                PrintStorageAccount(sa);
+            }
+            Console.WriteLine();
         }
 
         public async static Task<Microsoft.Rest.ServiceClientCredentials> AzureAuthenticateAsync()
@@ -202,46 +211,45 @@ namespace AzureStackStorage
             Console.ReadLine(); 
         }
 
-        private static void StorageSampleE2E(ResourceManagementClient resourceClient, StorageManagementClient storage)
+        private static void StorageSampleE2E(ResourceManagementClient resourceClient, StorageManagementClient storageMgmtClient)
         {
             string rgName = generageRamdonName("rgAzS", 20);
-            string storageAccountName1 = generageRamdonName("sa1", 20).ToLower();
+            string storageAccountName = generageRamdonName("sa1", 20).ToLower();
+            string kvName = "KeyVaultSample";
 
             try
             {
-                //Register the Storage Resource Provider with the Subscription
-                RegisterStorageResourceProvider(resourceClient);
-
                 //Create a new resource group
                 CreateResourceGroup(rgName, resourceClient);
 
                 //Create a new KeyVault
-                string vaultUri = CreateKeyVault(rgName, resourceClient, "KeyVaultSample");
+                CreateKeyVault(rgName, resourceClient, kvName);
 
                 //Create a new account in a specific resource group with the specified account name                     
-                CreateStorageAccount(rgName, storageAccountName1, storage);
+                CreateStorageAccount(rgName, storageAccountName, storageMgmtClient);
                 
                 //Get the storage account keys for a given account and resource group
-                IList<StorageAccountKey> acctKeys = storage.StorageAccounts.ListKeys(rgName, storageAccountName1).Keys;
+                IList<StorageAccountKey> acctKeys = storageMgmtClient.StorageAccounts.ListKeys(rgName, storageAccountName).Keys;
                 Console.WriteLine("Key1 = {0}\nKey2 = {1}\n",acctKeys[0].Value,acctKeys[1].Value);
 
                 //Get all the account properties for a given resource group and account name
-                StorageAccount storAcct = storage.StorageAccounts.GetProperties(rgName, storageAccountName1);
+                StorageAccount storAcct = storageMgmtClient.StorageAccounts.GetProperties(rgName, storageAccountName);
 
                 //Get a list of storage accounts within a specific resource group
-                IEnumerable<StorageAccount> storAccts = storage.StorageAccounts.ListByResourceGroup(rgName);
+                IEnumerable<StorageAccount> storAccts = storageMgmtClient.StorageAccounts.ListByResourceGroup(rgName);
+                Console.WriteLine("Print all the storage accounts under resource group \"{0}\":",rgName);
+                PrintAllStorageAccounts(storAccts);
 
                 //Get all the storage accounts for a given subscription
-                IEnumerable<StorageAccount> storAcctsSub = storage.StorageAccounts.List();
+                IEnumerable<StorageAccount> storAcctsSub = storageMgmtClient.StorageAccounts.List();
+                Console.WriteLine("Print all the storage accounts under Sub \"{0}\":",storageMgmtClient.SubscriptionId);
+                PrintAllStorageAccounts(storAcctsSub);
 
                 //Create a new container, upload and download blobs. 
-                StorageBlobSample(storageAccountName1, acctKeys[0].Value);
-
-                //Check if the account name is available
-                bool? nameAvailable = storage.StorageAccounts.CheckNameAvailability(storageAccountName1).NameAvailable;
+                StorageBlobSample(storageAccountName, acctKeys[0].Value);
 
                 //Delete a storage account with the given account name and a resource group
-                DeleteStorageAccount(rgName, storageAccountName1, storage);
+                DeleteStorageAccount(rgName, storageAccountName, storageMgmtClient);
 
             }
             catch (Exception ex)
@@ -325,18 +333,37 @@ namespace AzureStackStorage
         {
             StorageAccountCreateParameters parameters = GetDefaultStorageAccountParameters();
 
-            Console.WriteLine("\nCreating a storage account...");
-            var storageAccount = storageMgmtClient.StorageAccounts.Create(rgname, acctName, parameters);
-            Console.WriteLine("Storage account created with name " + storageAccount.Name);
+            //Check if the account name is available
+            bool? nameAvailable = storageMgmtClient.StorageAccounts.CheckNameAvailability(acctName).NameAvailable;
+            if(nameAvailable != null && (bool)nameAvailable)
+            {
+                Console.WriteLine("\nCreating a storage account...");
+                var storageAccount = storageMgmtClient.StorageAccounts.Create(rgname, acctName, parameters);
+                Console.WriteLine("Storage account created with name " + storageAccount.Name);
+            }
+            else
+            {
+                Console.WriteLine("\nStorage account name \"{0}\" already exists.", acctName);
+                return;
+            }
         }
 
         /// Deletes a storage account for the specified account name
         private static void DeleteStorageAccount(string rgname, string acctName, StorageManagementClient storageMgmtClient)
         {
-            Console.WriteLine("Deleting the storage account of "+acctName);
-            storageMgmtClient.StorageAccounts.Delete(rgname, acctName);
-            Console.WriteLine("Storage account " + acctName + " deleted");
-            Console.WriteLine();
+            //Check if the account name is available
+            bool? nameAvailable = storageMgmtClient.StorageAccounts.CheckNameAvailability(acctName).NameAvailable;
+            if(null != nameAvailable && false == (bool)nameAvailable )
+            {
+                Console.WriteLine("Deleting the storage account of "+acctName);
+                storageMgmtClient.StorageAccounts.Delete(rgname, acctName);
+                Console.WriteLine("Storage account " + acctName + " deleted.\n");
+            }
+            else
+            {
+                Console.WriteLine("\nStorage account name \"{0}\" does not exist.\n", acctName);
+                return;
+            }
         }
 
         /// Returns default values to create a storage account
