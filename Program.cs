@@ -92,29 +92,26 @@ namespace AzureStackStorage
             
         }
         
-        public static void PrintStorageAccountKeys(IReadOnlyList<StorageAccountKey> storageAccountKeys)
+        private async static Task SampleRunAsync()
         {
-            foreach (var storageAccountKey in storageAccountKeys)
+            var creds = await AzureAuthenticateAsync();
+
+            var resourceClient = new ResourceManagementClient(creds)
             {
-                Console.WriteLine($"Key {storageAccountKey.KeyName} = {storageAccountKey.Value}");
-            }
-        }
+                BaseUri = new Uri(AzS_ManagementEndPoint),
+                SubscriptionId = AzS_SubscriptionID
+            };
 
-        public static void PrintStorageAccount(StorageAccount sa)
-        {
-            Console.WriteLine($"{sa.Name} created @ {sa.CreationTime}");
-        }
-
-        public static void PrintAllStorageAccounts(IEnumerable<StorageAccount> storAccts)
-        {
-            foreach(StorageAccount sa in storAccts)
+            var storageClient = new StorageManagementClient(creds)
             {
-                PrintStorageAccount(sa);
-            }
-            Console.WriteLine();
+                BaseUri = new Uri(AzS_ManagementEndPoint),
+                SubscriptionId = AzS_SubscriptionID
+            };
+
+            StorageSampleE2E(resourceClient, storageClient);
         }
 
-        public async static Task<Microsoft.Rest.ServiceClientCredentials> AzureAuthenticateAsync()
+        private async static Task<Microsoft.Rest.ServiceClientCredentials> AzureAuthenticateAsync()
         {
             try
             {
@@ -135,37 +132,63 @@ namespace AzureStackStorage
             }
         }
 
-        private static string generageRamdonName(string pre, int length)
+        private static void StorageSampleE2E(ResourceManagementClient resourceClient, StorageManagementClient storageMgmtClient)
         {
-            var _constent = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-            var r = new Random();
-            string result = pre;
-            while (length > 0)
+            string rgName = generageRamdonName("rgAzS", 20);
+            string storageAccountName = generageRamdonName("sa1", 20).ToLower();
+            string kvName = "KeyVaultSample";
+
+            try
             {
-                result += _constent[r.Next(0,_constent.Length)];
-                length--;
+                //Create a new resource group
+                CreateResourceGroup(rgName, resourceClient);
+
+                //Create a new KeyVault
+                CreateKeyVault(rgName, resourceClient, kvName);
+
+                //Create a new account in a specific resource group with the specified account name                     
+                CreateStorageAccount(rgName, storageAccountName, storageMgmtClient);
+                
+                //Get the storage account keys for a given account and resource group
+                IList<StorageAccountKey> acctKeys = storageMgmtClient.StorageAccounts.ListKeys(rgName, storageAccountName).Keys;
+                PrintStorageAccountKeys(acctKeys);
+                //Console.WriteLine("Key1 = {0}\nKey2 = {1}\n",acctKeys[0].Value,acctKeys[1].Value);
+
+                //Get all the account properties for a given resource group and account name
+                StorageAccount storAcct = storageMgmtClient.StorageAccounts.GetProperties(rgName, storageAccountName);
+
+                //Get a list of storage accounts within a specific resource group
+                IEnumerable<StorageAccount> storAccts = storageMgmtClient.StorageAccounts.ListByResourceGroup(rgName);
+                Console.WriteLine("Print all the storage accounts under resource group \"{0}\":",rgName);
+                PrintAllStorageAccounts(storAccts);
+
+                //Get all the storage accounts for a given subscription
+                IEnumerable<StorageAccount> storAcctsSub = storageMgmtClient.StorageAccounts.List();
+                Console.WriteLine("Print all the storage accounts under Sub \"{0}\":",storageMgmtClient.SubscriptionId);
+                PrintAllStorageAccounts(storAcctsSub);
+
+                //Create a new container, upload and download blobs. 
+                StorageBlobSample(storageAccountName, acctKeys[0].Value);
+
+                //Delete a storage account with the given account name and a resource group
+                DeleteStorageAccount(rgName, storageAccountName, storageMgmtClient);
+
             }
-
-            return result;
-        }
-
-        public async static Task SampleRunAsync()
-        {
-            var creds = await AzureAuthenticateAsync();
-
-            var resourceClient = new ResourceManagementClient(creds)
+            catch (Exception ex)
             {
-                BaseUri = new Uri(AzS_ManagementEndPoint),
-                SubscriptionId = AzS_SubscriptionID
-            };
-
-            var storageClient = new StorageManagementClient(creds)
+                Console.WriteLine(ex.ToString());
+            }
+            finally
             {
-                BaseUri = new Uri(AzS_ManagementEndPoint),
-                SubscriptionId = AzS_SubscriptionID
-            };
+                // clean up the resource groups created in this sample code 
 
-            StorageSampleE2E(resourceClient, storageClient);
+                if (resourceClient.ResourceGroups.CheckExistence(rgName))
+                {
+                    Console.WriteLine("Deleting the ResourceGroup of " + rgName);
+                    resourceClient.ResourceGroups.Delete(rgName);
+                    Console.WriteLine("sample resource group is cleaned up.\n");
+                }
+            }
         }
 
         private static void StorageBlobSample(string accountName, string key)
@@ -211,77 +234,8 @@ namespace AzureStackStorage
             Console.ReadLine(); 
         }
 
-        private static void StorageSampleE2E(ResourceManagementClient resourceClient, StorageManagementClient storageMgmtClient)
-        {
-            string rgName = generageRamdonName("rgAzS", 20);
-            string storageAccountName = generageRamdonName("sa1", 20).ToLower();
-            string kvName = "KeyVaultSample";
-
-            try
-            {
-                //Create a new resource group
-                CreateResourceGroup(rgName, resourceClient);
-
-                //Create a new KeyVault
-                CreateKeyVault(rgName, resourceClient, kvName);
-
-                //Create a new account in a specific resource group with the specified account name                     
-                CreateStorageAccount(rgName, storageAccountName, storageMgmtClient);
-                
-                //Get the storage account keys for a given account and resource group
-                IList<StorageAccountKey> acctKeys = storageMgmtClient.StorageAccounts.ListKeys(rgName, storageAccountName).Keys;
-                Console.WriteLine("Key1 = {0}\nKey2 = {1}\n",acctKeys[0].Value,acctKeys[1].Value);
-
-                //Get all the account properties for a given resource group and account name
-                StorageAccount storAcct = storageMgmtClient.StorageAccounts.GetProperties(rgName, storageAccountName);
-
-                //Get a list of storage accounts within a specific resource group
-                IEnumerable<StorageAccount> storAccts = storageMgmtClient.StorageAccounts.ListByResourceGroup(rgName);
-                Console.WriteLine("Print all the storage accounts under resource group \"{0}\":",rgName);
-                PrintAllStorageAccounts(storAccts);
-
-                //Get all the storage accounts for a given subscription
-                IEnumerable<StorageAccount> storAcctsSub = storageMgmtClient.StorageAccounts.List();
-                Console.WriteLine("Print all the storage accounts under Sub \"{0}\":",storageMgmtClient.SubscriptionId);
-                PrintAllStorageAccounts(storAcctsSub);
-
-                //Create a new container, upload and download blobs. 
-                StorageBlobSample(storageAccountName, acctKeys[0].Value);
-
-                //Delete a storage account with the given account name and a resource group
-                DeleteStorageAccount(rgName, storageAccountName, storageMgmtClient);
-
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.ToString());
-            }
-            finally
-            {
-                // clean up the resource groups created in this sample code 
-
-                if (resourceClient.ResourceGroups.CheckExistence(rgName))
-                {
-                    Console.WriteLine("Deleting the ResourceGroup of " + rgName);
-                    resourceClient.ResourceGroups.Delete(rgName);
-                    Console.WriteLine("sample resource group is cleaned up.\n");
-                }
-            }
-        }
-
-
-        /// Registers the Storage Resource Provider in the subscription.
-        public static void RegisterStorageResourceProvider(ResourceManagementClient resourcesClient)
-        {
-            Console.WriteLine();
-            Console.WriteLine("Registering Storage Resource Provider with subscription...");
-            resourcesClient.Providers.Register("Microsoft.Storage");
-            Console.WriteLine("Storage Resource Provider registered.\n");
-        }
-
-
         /// Creates a new resource group with the specified name
-        public static void CreateResourceGroup(string rgname, ResourceManagementClient resourcesClient)
+        private static void CreateResourceGroup(string rgname, ResourceManagementClient resourcesClient)
         {
             Console.WriteLine("Creating a resource group...");
             var resourceGroup = resourcesClient.ResourceGroups.CreateOrUpdate(
@@ -295,7 +249,7 @@ namespace AzureStackStorage
 
         }
 
-        public static string CreateKeyVault(string rgName, ResourceManagementClient rmClient, string kbName)
+        private static string CreateKeyVault(string rgName, ResourceManagementClient rmClient, string kbName)
         {
             Console.WriteLine("Create a Key Vault resource with a generic PUT");
             var keyVaultParams = new GenericResource
@@ -335,7 +289,7 @@ namespace AzureStackStorage
 
             //Check if the account name is available
             bool? nameAvailable = storageMgmtClient.StorageAccounts.CheckNameAvailability(acctName).NameAvailable;
-            if(nameAvailable != null && (bool)nameAvailable)
+            if(null != nameAvailable && true == (bool)nameAvailable)
             {
                 Console.WriteLine("\nCreating a storage account...");
                 var storageAccount = storageMgmtClient.StorageAccounts.Create(rgname, acctName, parameters);
@@ -378,6 +332,42 @@ namespace AzureStackStorage
             };
 
             return account;
+        }
+
+        private static void PrintStorageAccountKeys(IList<StorageAccountKey> storageAccountKeys)
+        {       
+            foreach (var storageAccountKey in storageAccountKeys) 
+            {
+                Console.WriteLine($"Key {storageAccountKey.KeyName} = {storageAccountKey.Value}");
+            }
+            Console.WriteLine();
+        }
+
+        private static void PrintStorageAccount(StorageAccount sa)
+        {
+            Console.WriteLine($"{sa.Name} created @ {sa.CreationTime}");
+        }
+
+        private static void PrintAllStorageAccounts(IEnumerable<StorageAccount> storAccts)
+        {
+            foreach(StorageAccount sa in storAccts)
+            {
+                PrintStorageAccount(sa);
+            }
+            Console.WriteLine();
+        }
+
+        private static string generageRamdonName(string pre, int length)
+        {
+            var _constent = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+            var r = new Random();
+            string result = pre;
+            while (length > 0)
+            {
+                result += _constent[r.Next(0,_constent.Length)];
+                length--;
+            }
+            return result;
         }
     }
 }
