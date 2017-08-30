@@ -11,16 +11,11 @@ This sample explains how to manage your resources and storage services in Azure 
 **On this page**
 - [Run this sample](#run)
 - [What is program.cs doing?](#example)
-    - [create a resource group](#create-rg)
+    - [login for Azure Stack](#login)
+    - [set up the ResourceManagementClient object](#resourcemngtclient)
+    - [set up the StorageManagementClient object](#storagemngtclient)
     - [create a storage account](#create-sa)
-    - [get the access keys of storage account](#get-sa-keys)
-    - [get a list of storage accounts within a resource group](#list-sa-rg)
-    - [get all the storage accounts for a given subscription](#list-sa-sub)
-    - [create a new blob container](#create-blob)
-    - [upload a blob](#upload)
-    - [download a blob](#download)
-    - [delete a storage account](#delete-sa)
-    - [delete a resource group](#delete-rg)
+    - [create a blob container](#blob)
 
 <a id="run"></a>
 ## Run this sample
@@ -67,7 +62,9 @@ This sample explains how to manage your resources and storage services in Azure 
 <a id="example"></a>
 ## What is program.cs doing? 
 The sample walks you through several resrouce group and storage services operations. It starts by setting up a ResourceManagementClient and StorageManagementClient objects using your subscription and credentials. 
-#### get the authentication token after login:
+<a id="login"></a>
+#### Login for Azure Stack:
+In order to access to the specific Azure Stack you want to operate, you need to customize a **ActiveDirectoryServiceSettings** with the value of **AzS_ActiveDirectory** and **AzS_ActiveDirectoryResourceID** we prepared in previous steps pass it for login. Otherwise, your operation will just go to the public Azure as a default behavior. 
 ```
 ActiveDirectoryServiceSettings s = new ActiveDirectoryServiceSettings();
 s.AuthenticationEndpoint = new Uri(AzS_ActiveDirectory);
@@ -75,7 +72,9 @@ s.TokenAudience = new Uri(AzS_ActiveDirectoryResourceID);
 s.ValidateAuthority = true;
 var serviceCreds = await ApplicationTokenProvider.LoginSilentAsync(AzS_TenantID, AzS_ClientID, AzS_SecretKey, s);
 ```
+<a id="resourcemngtclient"></a>
 #### set up the ResourceManagementClient object
+The mangement endpoint for resource management client object in Azure Stack has to be replaced by the value of **AzS_ManagementEndPoint** we prepared in previous steps. This is for the specific Azure Stack we need to manage. 
 ```
 var resourceClient = new ResourceManagementClient(creds)
 {
@@ -83,7 +82,9 @@ var resourceClient = new ResourceManagementClient(creds)
     SubscriptionId = AzS_SubscriptionID
 };
 ```
+<a id="storagemngtclient"></a>
 #### set up the StorageManagementClient object 
+The mangement endpoint for storage management client object in Azure Stack has to be replaced by the value of **AzS_ManagementEndPoint** we prepared in previous steps. This is for the specific Azure Stack we need to manage. 
 ```            
 var storageClient = new StorageManagementClient(creds)
 {
@@ -91,22 +92,13 @@ var storageClient = new StorageManagementClient(creds)
     SubscriptionId = AzS_SubscriptionID
 };
 ```
-<a id="create-rg"></a>
-### create a resource group 
-```
-var resourceGroup = resourcesClient.ResourceGroups.CreateOrUpdate(
-    rgname,
-    new ResourceGroup
-    {
-        Location = AzS_Location
-    });
-```
 <a id="create-sa"></a>
 ### create a storage account 
+In Azure Stack, there are some differences compared to public Azure, for example, Azure Stack storage supports LRS and gerneral-purpose storage account type, so we need to identify these value correctly when creating a storage account. For more information in [Azure Stack Storage: Differences and considerations](https://docs.microsoft.com/en-us/azure/azure-stack/azure-stack-acs-differences)
 ```
 // set default parameters for storage account in Azure Stack 
-public static Microsoft.Azure.Management.Storage.Models.Sku DefaultSku = new Microsoft.Azure.Management.Storage.Models.Sku(SkuName.StandardLRS);
-public static Kind DefaultStorageKind = Kind.Storage;
+public static Microsoft.Azure.Management.Storage.Models.Sku DefaultSku = new Microsoft.Azure.Management.Storage.Models.Sku(SkuName.StandardLRS); // Azure Stack only supports LRS
+public static Kind DefaultStorageKind = Kind.Storage; // Azure Stack only supports general-purpose stroage account type 
 public static Dictionary<string, string> DefaultTags = new Dictionary<string, string>
 {
     {"key1","value1"},
@@ -124,62 +116,14 @@ StorageAccountCreateParameters parameters = new StorageAccountCreateParameters
 };
 var storageAccount = storageMgmtClient.StorageAccounts.Create(rgname, acctName, parameters);
 ```
-<a id="get-sa-keys"></a>
-### get the access keys for a storage account 
+<a id="blob"></a>
+### create a blob container 
+When creating a blob container in Azure Stack Storage service, only one thing needs to be specified, customized the storage endpoint uri during the CloudStorageAccount initializaiton. How to prepare the **Az_StorageEndPoint** you can find details in previous steps. 
+
 ```
-//Get the storage account keys for a given account and resource group
-IList<StorageAccountKey> acctKeys = storage.StorageAccounts.ListKeys(rgName, storageAccountName1).Keys;
-```
-<a id="list-sa-rg"></a>
-### get a list of storage accounts within a resource group 
-```
-//Get a list of storage accounts within a specific resource group
-IEnumerable<StorageAccount> storAccts = storage.StorageAccounts.ListByResourceGroup(rgName);
-```
-<a id="list-sa-sub"></a>
-### get all the storage accounts for a given subscription 
-```
-//Get all the storage accounts for a given subscription
-IEnumerable<StorageAccount> storAcctsSub = storage.StorageAccounts.List();
-```
-<a id="create-blob"></a>
-### create a new blob container
-```
-// set up the cloudblobclient object
 StorageCredentials cre = new StorageCredentials(accountName, key);
-CloudStorageAccount storageAccount = new CloudStorageAccount(cre, AzS_StorageEndPoint, true);
+CloudStorageAccount storageAccount = new CloudStorageAccount(cre, AzS_StorageEndPoint, true); // specify the value of storage endpoint for Azure Stack
 CloudBlobClient blob = storageAccount.CreateCloudBlobClient();
-// create a blob container fro a given container name
 CloudBlobContainer blobContainer = blob.GetContainerReference(blobcontainerName);
 blobContainer.CreateIfNotExists();
-```
-<a id="upload"></a>
-### upload a blob 
-```
-CloudBlockBlob bb = blobContainer.GetBlockBlobReference(blobname);
-/* steps of setting up the bytes array buffer */ 
-using (MemoryStream stream = new MemoryStream(buffer))
-{
-    bb.UploadFromStream(stream,size);
-}
-```
-<a id="download"></a>
-### download a blob 
-```
-using (MemoryStream outputStream = new MemoryStream())
-{
-    bb.DownloadToStream(outputStream, null, null); 
-}
-```
-<a id="delete-sa"></a>
-### delete a storage account 
-```
-storageMgmtClient.StorageAccounts.Delete(rgname, acctName);
-
-```
-<a id="delete-rg"></a>
-### delete a resource group 
-```
-resourceClient.ResourceGroups.Delete(rgName);
-
 ```
